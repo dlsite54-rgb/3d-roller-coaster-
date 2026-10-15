@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Roller Coaster Thrill Ride</title>
+    <!-- Tailwind CSS for modern responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-white">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- UI Overlay -->
+    <div class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- Top Header & Language Selector -->
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 pointer-events-auto">
+            <div class="glass-panel px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+                <div class="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></div>
+                <h1 id="ui-title" class="text-xl font-extrabold tracking-wide bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent">
+                    🎢 Mega Coaster 3D
+                </h1>
+            </div>
+
+            <!-- Language Switcher -->
+            <div class="glass-panel p-1.5 rounded-2xl shadow-xl flex gap-1">
+                <button onclick="setLanguage('en')" id="btn-lang-en" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all bg-cyan-500 text-white shadow">EN</button>
+                <button onclick="setLanguage('ko')" id="btn-lang-ko" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-300 hover:text-white">한국어</button>
+                <button onclick="setLanguage('ja')" id="btn-lang-ja" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-300 hover:text-white">日本語</button>
+            </div>
+        </div>
+
+        <!-- Center Notification / Instructions banner -->
+        <div class="self-center pointer-events-auto">
+            <div id="banner-msg" class="glass-panel px-6 py-2 rounded-full text-xs md:text-sm text-cyan-200 shadow-lg border border-cyan-500/30 text-center">
+                ✨ Click 'Start Ride' to experience the thrill! Sound requires interaction.
+            </div>
+        </div>
+
+        <!-- Bottom Control Panel -->
+        <div class="self-center w-full max-w-3xl pointer-events-auto">
+            <div class="glass-panel p-4 md:p-5 rounded-3xl shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                
+                <!-- Ride Actions -->
+                <div class="flex items-center gap-3 w-full md:w-auto justify-center">
+                    <button id="btn-toggle-ride" onclick="toggleRide()" class="flex-1 md:flex-initial px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-900/40 transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2">
+                        <span id="icon-play">▶</span> <span id="ui-start-btn">Start Ride</span>
+                    </button>
+                    <button onclick="resetRide()" class="px-4 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-sm transition-all border border-slate-700">
+                        🔄 <span id="ui-reset-btn">Reset</span>
+                    </button>
+                </div>
+
+                <!-- Camera Switcher -->
+                <div class="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 w-full md:w-auto justify-center">
+                    <button onclick="setCameraMode('follow')" id="cam-follow" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all bg-indigo-600 text-white shadow">
+                        🎥 <span id="ui-cam-follow">Front Car</span>
+                    </button>
+                    <button onclick="setCameraMode('bird')" id="cam-bird" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-slate-400 hover:text-white">
+                        🦅 <span id="ui-cam-bird">Bird's Eye</span>
+                    </button>
+                    <button onclick="setCameraMode('crowd')" id="cam-crowd" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-slate-400 hover:text-white">
+                        👥 <span id="ui-cam-crowd">Crowd View</span>
+                    </button>
+                </div>
+
+                <!-- Speed Control Slider -->
+                <div class="flex flex-col gap-1 w-full md:w-44 px-2">
+                    <div class="flex justify-between text-xs font-medium text-slate-300">
+                        <span id="ui-speed-label">Speed</span>
+                        <span id="speed-val">1.0x</span>
+                    </div>
+                    <input type="range" id="speed-slider" min="0.2" max="2.5" step="0.1" value="1.0" oninput="updateSpeed(this.value)" class="w-full accent-cyan-400 bg-slate-800 rounded-lg cursor-pointer h-2">
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        /* --- Multilingual Dictionary --- */
+        const translations = {
+            en: {
+                title: "🎢 Mega Coaster 3D",
+                banner: "✨ Experience the 3D thrill ride with dynamic crowd cheers and audio!",
+                startBtn: "Start Ride",
+                pauseBtn: "Pause Ride",
+                resetBtn: "Reset",
+                camFollow: "Coaster Cam",
+                camBird: "Bird's Eye",
+                camCrowd: "Crowd View",
+                speedLabel: "Speed"
+            },
+            ko: {
+                title: "🎢 메가 롤러코스터 3D",
+                banner: "✨ 관중들의 환호와 실감나는 음향과 함께 3D 스릴을 즐겨보세요!",
+                startBtn: "운행 시작",
+                pauseBtn: "일시 정지",
+                resetBtn: "초기화",
+                camFollow: "탑승 시점",
+                camBird: "하늘 시점",
+                camCrowd: "관중 시점",
+                speedLabel: "속도"
+            },
+            ja: {
+                title: "🎢 メガジェットコースター 3D",
+                banner: "✨ 観客の歓声とリアルなサウンドで3Dスリルライドを満喫しよう！",
+                startBtn: "乗車開始",
+                pauseBtn: "一時停止",
+                resetBtn: "リセット",
+                camFollow: "コースター視点",
+                camBird: "鳥瞰視点",
+                camCrowd: "観客視点",
+                speedLabel: "速度"
+            }
+        };
+
+        let currentLang = 'en';
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.querySelectorAll('[id^="btn-lang-"]').forEach(btn => {
+                btn.classList.remove('bg-cyan-500', 'text-white', 'shadow');
+                btn.classList.add('text-slate-300');
+            });
+            const activeBtn = document.getElementById(`btn-lang-${lang}`);
+            activeBtn.classList.add('bg-cyan-500', 'text-white', 'shadow');
+            activeBtn.classList.remove('text-slate-300');
+
+            const t = translations[lang];
+            document.getElementById('ui-title').innerText = t.title;
+            document.getElementById('banner-msg').innerText = t.banner;
+            document.getElementById('ui-start-btn').innerText = isRunning ? t.pauseBtn : t.startBtn;
+            document.getElementById('ui-reset-btn').innerText = t.resetBtn;
+            document.getElementById('ui-cam-follow').innerText = t.camFollow;
+            document.getElementById('ui-cam-bird').innerText = t.camBird;
+            document.getElementById('ui-cam-crowd').innerText = t.camCrowd;
+            document.getElementById('ui-speed-label').innerText = t.speedLabel;
+        }
+
+        /* --- Audio Manager (Web Audio API for Synthesized Sound Effects) --- */
+        class SoundManager {
+            constructor() {
+                this.audioCtx = null;
+                this.isInitialized = false;
+                this.rumbleGain = null;
+                this.rumbleOsc = null;
+                this.screamGain = null;
+                this.cheerGain = null;
+            }
+
+            init() {
+                if (this.isInitialized) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.audioCtx = new AudioContext();
+
+                // 1. Rumble Sound (Track noise generator with low-pass filter)
+                this.rumbleOsc = this.audioCtx.createOscillator();
+                this.rumbleOsc.type = 'sawtooth';
+                this.rumbleOsc.frequency.setValueAtTime(45, this.audioCtx.currentTime);
+
+                const filter = this.audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(120, this.audioCtx.currentTime);
+
+                this.rumbleGain = this.audioCtx.createGain();
+                this.rumbleGain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+
+                this.rumbleOsc.connect(filter);
+                filter.connect(this.rumbleGain);
+                this.rumbleGain.connect(this.audioCtx.destination);
+                this.rumbleOsc.start();
+
+                // 2. Scream / Wind Synthesizer for drops
+                this.screamGain = this.audioCtx.createGain();
+                this.screamGain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+                
+                // Noise buffer for wind/screams
+                const bufferSize = this.audioCtx.sampleRate * 2;
+                const noiseBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.audioCtx.createBufferSource();
+                noise.buffer = noiseBuffer;
+                noise.loop = true;
+
+                const bandpass = this.audioCtx.createBiquadFilter();
+                bandpass.type = 'bandpass';
+                bandpass.frequency.setValueAtTime(1200, this.audioCtx.currentTime);
+                bandpass.Q.setValueAtTime(3.0, this.audioCtx.currentTime);
+
+                noise.connect(bandpass);
+                bandpass.connect(this.screamGain);
+                this.screamGain.connect(this.audioCtx.destination);
+                noise.start();
+
+                this.isInitialized = true;
+            }
+
+            updateAudio(speed, isDropping, running) {
+                if (!this.isInitialized || !this.audioCtx) return;
+                if (this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume();
+                }
+
+                if (!running) {
+                    this.rumbleGain.gain.setTargetAtTime(0, this.audioCtx.currentTime, 0.1);
+                    this.screamGain.gain.setTargetAtTime(0, this.audioCtx.currentTime, 0.1);
+                    return;
+                }
+
+                // Rumbling pitch and volume based on speed
+                this.rumbleOsc.frequency.setTargetAtTime(35 + speed * 25, this.audioCtx.currentTime, 0.1);
+                this.rumbleGain.gain.setTargetAtTime(0.12 * (speed / 1.5), this.audioCtx.currentTime, 0.1);
+
+                // Scream during big drops
+                if (isDropping) {
+                    this.screamGain.gain.setTargetAtTime(0.25, this.audioCtx.currentTime, 0.1);
+                } else {
+                    this.screamGain.gain.setTargetAtTime(0.02, this.audioCtx.currentTime, 0.2);
+                }
+            }
+        }
+
+        const soundManager = new SoundManager();
+
+        /* --- Three.js Roller Coaster Scene Setup --- */
+        let scene, camera, renderer;
+        let trackCurve, trainGroup = [], passengers = [];
+        let progress = 0;
+        let isRunning = false;
+        let rideSpeed = 1.0;
+        let cameraMode = 'follow'; // 'follow', 'bird', 'crowd'
+        let crowdPeople = [];
+
+        // Custom Roller Coaster Track Curve Definition
+        class CoasterCurve extends THREE.Curve {
+            constructor() {
+                super();
+            }
+            getPoint(t, optionalTarget = new THREE.Vector3()) {
+                const point = optionalTarget;
+                const angle = t * Math.PI * 2;
+                
+                // Complex looping and banking roller coaster path
+                const x = Math.sin(angle) * 45;
+                const z = Math.cos(angle * 2) * 35;
+                const y = 10 + Math.sin(angle * 3) * 15 + Math.cos(angle) * 8;
+                
+                return point.set(x, y, z);
+            }
+        }
+
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xbae6fd); // Clear bright blue sky
+            scene.fog = new THREE.FogExp2(0xbae6fd, 0.008);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 1000);
+            camera.position.set(0, 20, 60);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.2);
+            sunLight.position.set(60, 100, 50);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 300;
+            const d = 60;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            // Environment Ground & Park
+            createEnvironment();
+
+            // Build Track & Rails
+            buildTrack();
+
+            // Build Coaster Train & Passengers
+            buildTrain();
+
+            // Build Crowd watching
+            buildCrowd();
+
+            // Window Resize Handler
+            window.addEventListener('resize', onWindowResize);
+
+            // Start Loop
+            animate();
+        }
+
+        function createEnvironment() {
+            // Grass Ground
+            const groundGeo = new THREE.PlaneGeometry(300, 300);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.8 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.5;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Decorative Park Plaza area in the center
+            const plazaGeo = new THREE.CylinderGeometry(30, 30, 0.2, 32);
+            const plazaMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8 });
+            const plaza = new THREE.Mesh(plazaGeo, plazaMat);
+            plaza.position.y = -0.4;
+            plaza.receiveShadow = true;
+            scene.add(plaza);
+
+            // Low poly trees around the park
+            for (let i = 0; i < 45; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 35 + Math.random() * 90;
+                const x = Math.cos(angle) * dist;
+                const z = Math.sin(angle) * dist;
+                createTree(x, z);
+            }
+        }
+
+        function createTree(x, z) {
+            const treeGroup = new THREE.Group();
+            
+            // Trunk
+            const trunkGeo = new THREE.CylinderGeometry(0.6, 0.9, 4, 6);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 2;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            // Foliage layers
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 });
+            const leaves1 = new THREE.Mesh(new THREE.ConeGeometry(3, 5, 6), leavesMat);
+            leaves1.position.y = 5;
+            leaves1.castShadow = true;
+            treeGroup.add(leaves1);
+
+            const leaves2 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 4, 6), leavesMat);
+            leaves2.position.y = 7.5;
+            leaves2.castShadow = true;
+            treeGroup.add(leaves2);
+
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+        }
+
+        function buildTrack() {
+            trackCurve = new CoasterCurve();
+            
+            // Tube geometry for rails
+            const tubularSegments = 1000;
+            const radius = 0.5;
+            const radialSegments = 8;
+            const trackGeo = new THREE.TubeGeometry(trackCurve, tubularSegments, radius, radialSegments, true);
+            const trackMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8, roughness: 0.2 });
+            const trackMesh = new THREE.Mesh(trackGeo, trackMat);
+            trackMesh.castShadow = true;
+            trackMesh.receiveShadow = true;
+            scene.add(trackMesh);
+
+            // Support Pillars
+            const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.5, roughness: 0.4 });
+            const steps = 60;
+            for (let i = 0; i < steps; i++) {
+                const t = i / steps;
+                const pos = trackCurve.getPoint(t);
+                
+                const pillarGeo = new THREE.CylinderGeometry(0.4, 0.6, pos.y + 1, 8);
+                const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+                pillar.position.set(pos.x, (pos.y + 1) / 2 - 0.5, pos.z);
+                pillar.castShadow = true;
+                pillar.receiveShadow = true;
+                scene.add(pillar);
+            }
+        }
+
+        function buildTrain() {
+            trainGroup = new THREE.Group();
+            
+            // Create 3 interconnected coaster cars
+            const carColors = [0xef4444, 0x3b82f6, 0xeab308]; // Red, Blue, Yellow
+
+            for (let c = 0; c < 3; c++) {
+                const car = new THREE.Group();
+
+                // Car body
+                const bodyGeo = new THREE.BoxGeometry(1.6, 0.8, 2.2);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: carColors[c], metalness: 0.6, roughness: 0.3 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.6;
+                body.castShadow = true;
+                car.add(body);
+
+                // Safety lap bar
+                const barGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.6, 6);
+                const barMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+                const bar = new THREE.Mesh(barGeo, barMat);
+                bar.rotation.z = Math.PI / 2;
+                bar.position.set(0, 1.1, -0.4);
+                car.add(bar);
+
+                // Add Passengers (Avatars sitting inside)
+                for (let p = 0; p < 2; p++) {
+                    const passenger = createPassenger();
+                    passenger.position.set(p === 0 ? -0.4 : 0.4, 0.4, 0);
+                    car.add(passenger);
+                    passengers.push(passenger);
+                }
+
+                car.position.z = -c * 2.8;
+                trainGroup.add(car);
+            }
+
+            scene.add(trainGroup);
+        }
+
+        function createPassenger() {
+            const person = new THREE.Group();
+
+            // Torso
+            const torsoGeo = new THREE.BoxGeometry(0.6, 0.7, 0.4);
+            const shirtColors = [0xffffff, 0xec4899, 0xa855f7, 0x06b6d4, 0xf97316];
+            const torsoMat = new THREE.MeshStandardMaterial({ color: shirtColors[Math.floor(Math.random() * shirtColors.length)] });
+            const torso = new THREE.Mesh(torsoGeo, torsoMat);
+            torso.position.y = 0.4;
+            person.add(torso);
+
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.3, 12, 12);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 0.95;
+            person.add(head);
+
+            // Hands raised up in excitement
+            const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.7, 6);
+            const armMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+            
+            const leftArm = new THREE.Mesh(armGeo, armMat);
+            leftArm.position.set(-0.4, 0.8, -0.2);
+            leftArm.rotation.x = -Math.PI / 3;
+            person.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeo, armMat);
+            rightArm.position.set(0.4, 0.8, -0.2);
+            rightArm.rotation.x = -Math.PI / 3;
+            person.add(rightArm);
+
+            return person;
+        }
+
+        function buildCrowd() {
+            // Gathered spectators around the plaza area watching the ride
+            const crowdColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xec4899];
+            
+            for (let i = 0; i < 40; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 12 + Math.random() * 16;
+                const x = Math.cos(angle) * dist;
+                const z = Math.sin(angle) * dist;
+
+                const spectator = new THREE.Group();
+                
+                // Body
+                const bodyGeo = new THREE.CylinderGeometry(0.3, 0.4, 1.2, 8);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: crowdColors[Math.floor(Math.random() * crowdColors.length)] });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.6;
+                body.castShadow = true;
+                spectator.add(body);
+
+                // Head
+                const headGeo = new THREE.SphereGeometry(0.25, 8, 8);
+                const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.y = 1.35;
+                spectator.add(head);
+
+                spectator.position.set(x, 0, z);
+                // Look toward center / coaster area
+                spectator.lookAt(0, 0, 0);
+
+                scene.add(spectator);
+                crowdPeople.push(spectator);
+            }
+        }
+
+        /* --- UI & Interaction Controllers --- */
+        function toggleRide() {
+            soundManager.init();
+            isRunning = !isRunning;
+            const t = translations[currentLang];
+            document.getElementById('ui-start-btn').innerText = isRunning ? t.pauseBtn : t.startBtn;
+            document.getElementById('icon-play').innerText = isRunning ? '⏸' : '▶';
+        }
+
+        function resetRide() {
+            isRunning = false;
+            progress = 0;
+            const t = translations[currentLang];
+            document.getElementById('ui-start-btn').innerText = t.startBtn;
+            document.getElementById('icon-play').innerText = '▶';
+            updateTrainPosition(0);
+        }
+
+        function updateSpeed(val) {
+            rideSpeed = parseFloat(val);
+            document.getElementById('speed-val').innerText = rideSpeed.toFixed(1) + 'x';
+        }
+
+        function setCameraMode(mode) {
+            cameraMode = mode;
+            document.querySelectorAll('[id^="cam-"]').forEach(btn => {
+                btn.classList.remove('bg-indigo-600', 'text-white', 'shadow');
+                btn.classList.add('text-slate-400');
+            });
+            const activeBtn = document.getElementById(`cam-${mode}`);
+            activeBtn.classList.add('bg-indigo-600', 'text-white', 'shadow');
+            activeBtn.classList.remove('text-slate-400');
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        let clock = new THREE.Clock();
+
+        function updateTrainPosition(delta) {
+            if (isRunning) {
+                progress += (delta * 0.08 * rideSpeed) % 1;
+            }
+
+            // Get point on track curve
+            const currentPoint = trackCurve.getPoint(progress);
+            const nextPoint = trackCurve.getPoint((progress + 0.005) % 1);
+
+            trainGroup.position.copy(currentPoint);
+            trainGroup.lookAt(nextPoint);
+
+            // Check if coaster is on a steep drop (y coordinate decreasing fast or high vertical speed)
+            const isDropping = nextPoint.y < currentPoint.y - 0.3;
+
+            // Animate passengers hands bouncing or waving
+            passengers.forEach((p, idx) => {
+                p.children[2].rotation.x = -Math.PI / 3 + Math.sin(Date.now() * 0.01 + idx) * 0.2;
+                p.children[3].rotation.x = -Math.PI / 3 + Math.cos(Date.now() * 0.01 + idx) * 0.2;
+            });
+
+            // Crowd cheering animation when train passes close
+            crowdPeople.forEach((c, idx) => {
+                const dist = c.position.distanceTo(currentPoint);
+                if (dist < 20) {
+                    c.position.y = Math.sin(Date.now() * 0.02 + idx) * 0.15;
+                } else {
+                    c.position.y = 0;
+                }
+            });
+
+            // Update Audio
+            soundManager.updateAudio(rideSpeed * (isDropping ? 1.8 : 1.0), isDropping, isRunning);
+
+            // Update Camera Position based on selected mode
+            if (cameraMode === 'follow') {
+                // First-person / Follow Coaster Cam
+                const camOffset = new THREE.Vector3(0, 3.5, -6).applyQuaternion(trainGroup.quaternion);
+                camera.position.copy(currentPoint).add(camOffset);
+                const lookTarget = currentPoint.clone().add(new THREE.Vector3(0, 1, 5).applyQuaternion(trainGroup.quaternion));
+                camera.lookAt(lookTarget);
+            } else if (cameraMode === 'bird') {
+                // Bird's Eye Overview Cam
+                const birdAngle = Date.now() * 0.0005;
+                camera.position.set(Math.cos(birdAngle) * 70, 50, Math.sin(birdAngle) * 70);
+                camera.lookAt(0, 5, 0);
+            } else if (cameraMode === 'crowd') {
+                // Fixed Crowd Spectator Cam
+                camera.position.set(25, 3, 25);
+                camera.lookAt(currentPoint);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            updateTrainPosition(delta);
+            renderer.render(scene, camera);
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            initScene();
+            setLanguage('en');
+        };
+    </script>
+</body>
+</html>
